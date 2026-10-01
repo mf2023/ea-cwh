@@ -28,11 +28,10 @@ both CI workflows (the PR gate and the publish-on-merge index release) can
 execute it without installing anything.
 
 Modes:
-    python tools/regen_catalog.py                # merge + validate (PR gate)
-    python tools/regen_catalog.py --check-pypi   # also verify every pinned
-                                                 # artifact is on PyPI with
-                                                 # the exact promised digest
-    python tools/regen_catalog.py --out F        # write catalog.json at F
+    python tools/regen_catalog.py                     # merge + validate (PR gate)
+    python tools/regen_catalog.py --check-pypi a b    # also verify entries a,b
+                                                      # on PyPI (no NAMEs = all)
+    python tools/regen_catalog.py --out F             # write catalog.json at F
 """
 
 from __future__ import annotations
@@ -68,16 +67,23 @@ def merge(entries_dir: Path) -> dict:
     }
 
 
-def check_pypi(doc: dict) -> list[str]:
+def check_pypi(doc: dict, only: list[str] | None = None) -> list[str]:
     """Verify each catalogued artifact is actually on PyPI, byte-identical.
 
     The plugin author uploads to PyPI BEFORE opening the registry PR
     (``encre-plugin publish``); this is the gate that makes a merge mean
     "the pinned wheel with this exact digest is downloadable".  A squatted
     or tampered distribution file fails here, not on the user's machine.
+
+    ``only`` restricts the cross-check to the given plugin names (the PR
+    gate uses it to verify just the changed entries; the publish workflow
+    always checks the full catalog).
     """
     problems: list[str] = []
+    wanted = {str(o).removesuffix(".json") for o in only} if only else None
     for entry in doc.get("plugins", []):
+        if wanted is not None and str(entry.get("name", "")) not in wanted:
+            continue
         pkg = str(entry.get("pypi_package", ""))
         version = str(entry.get("version", ""))
         url = f"https://pypi.org/pypi/{pkg}/{version}/json"
@@ -107,8 +113,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--entries", default=str(ROOT / "catalog.d"),
                     help="directory of per-plugin entry JSON files")
     ap.add_argument("--out", help="write the merged catalog to this path")
-    ap.add_argument("--check-pypi", action="store_true",
-                    help="cross-verify pinned artifacts and digests on PyPI")
+    ap.add_argument("--check-pypi", nargs="*", metavar="NAME", default=None,
+                    help="cross-verify pinned artifacts on PyPI; with no NAMEs "
+                         "check the whole catalog, otherwise only the listed plugins")
     args = ap.parse_args(argv)
 
     doc = merge(Path(args.entries))
@@ -118,8 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         for line in violations:
             print(f"  - {line}", file=sys.stderr)
         return 1
-    if args.check_pypi:
-        problems = check_pypi(doc)
+    if args.check_pypi is not None:
+        problems = check_pypi(doc, only=args.check_pypi or None)
         if problems:
             print("PyPI cross-check FAILED:", file=sys.stderr)
             for line in problems:

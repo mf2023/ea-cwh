@@ -1,9 +1,10 @@
 # PR gate for the Encre Agent plugin registry.
 #
 # Every registry PR adds/updates one catalog.d/<name>.json entry produced by
-# `encre-plugin publish`.  A PR may only merge when the merged catalog still
-# validates AND every pinned artifact is verifiably on PyPI with the exact
-# sha256 the index promises — so "merged" means "installable, byte-identical".
+# `encre-plugin publish`.  A PR may only merge when the FULL merged catalog
+# still validates (schema) AND every CHANGED entry's artifact is verifiably
+# on PyPI with the exact sha256 the index promises — so "merged" means
+# "installable, byte-identical".
 name: validate-catalog-entry
 
 on:
@@ -24,16 +25,30 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
-      - name: Merge and schema-validate the catalog
+      - name: Merge and schema-validate the full catalog
         run: python tools/regen_catalog.py > /dev/null
 
-      - name: Cross-check pinned artifacts on PyPI
-        # Reachability failures (429/timeouts) retry once; a digest mismatch
-        # or missing file is a hard reject.
+      - name: Determine changed entries
+        id: changed
         run: |
-          python tools/regen_catalog.py --check-pypi > /dev/null || {
-            sleep 20
-            python tools/regen_catalog.py --check-pypi > /dev/null
+          git fetch --quiet origin "${{ github.base_ref }}"
+          mapfile -t files < <(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- catalog.d)
+          names=()
+          for f in "${files[@]}"; do
+            stem="${f##*/}"
+            names+=("${stem%.json}")
+          done
+          echo "names=${names[*]}" >> "$GITHUB_OUTPUT"
+          echo "count=${#names[@]}" >> "$GITHUB_OUTPUT"
+
+      - name: Cross-check changed artifacts on PyPI
+        if: steps.changed.outputs.count != '0'
+        # Fresh PyPI uploads can take a few minutes to serve; a genuine
+        # digest mismatch still fails on the retry.
+        run: |
+          python tools/regen_catalog.py --check-pypi ${{ steps.changed.outputs.names }} > /dev/null || {
+            sleep 60
+            python tools/regen_catalog.py --check-pypi ${{ steps.changed.outputs.names }} > /dev/null
           }

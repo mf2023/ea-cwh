@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Install build tooling
         run: python -m pip install --upgrade build
@@ -71,4 +71,9 @@ jobs:
           git add ea_cwh/catalog.json pyproject.toml
           git diff --cached --quiet || git commit -m \
             "index: regenerate catalog.json [skip ci]"
-          git push
+          # Two merges can land while this job runs; rebase once before
+          # giving up so the repo always converges on the published index.
+          git push origin HEAD:main || {
+            git pull --rebase origin main
+            git push origin HEAD:main
+          }

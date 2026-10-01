@@ -1,17 +1,19 @@
 <div align="center">
 
-# ea-cwh — Encre Agent Plugin Central Registry
+# Encre Agent Plugin Central Registry
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-ea--cwh-181717?style=flat-square&logo=github)](https://github.com/mf2023/ea-cwh)
+[![Encre Agent](https://img.shields.io/badge/Encre%20Agent-plugin--market-181717?style=flat-square)](https://github.com/mf2023/Encre)
 
 This repository is the **central repository of the Encre Agent plugin market**. It holds the
-authoritative index package `ea-cwh` (one validated `catalog.json` describing every published
-plugin), the per-plugin entry directory `catalog.d/`, the CI that gates and publishes them,
-and the zero-dependency tooling behind both.
+authoritative plugin index (one validated `catalog.json` describing every published plugin),
+the per-plugin entry directory `catalog.d/`, the CI that gates and publishes them, and the
+zero-dependency tooling behind both.
 
-The Encre Agent market backend never renders from the network: it upgrades `ea-cwh` once a
-day with pip and displays what the index says. Publishing here IS publishing to the market.
+The index ships to clients as a plain data package on PyPI, versioned by this repo's release
+pipeline (see below). The Encre Agent market backend never renders from the network: it
+upgrades the index package once a day and displays what the validated document says.
+Publishing here IS publishing to the market.
 
 </div>
 
@@ -30,7 +32,8 @@ author machine                       this repository                    every En
 
 1. A plugin is a normal Python package named **`ea-plugin-<name>`**, published to PyPI.
 2. Its catalogue entry lands here as `catalog.d/<name>.json` via a PR opened by `encre-plugin publish`.
-3. The PR gate merges all entries, validates the schema and cross-checks every artifact on PyPI.
+3. The PR gate merges all entries, validates the schema, and cross-checks the artifacts of
+   every CHANGED entry on PyPI (the publish job always verifies the full catalog).
 4. Merging triggers `publish-index.yml`, which regenerates `ea_cwh/catalog.json`, stamps a new
    index version and releases `ea-cwh` to PyPI. Agents pick it up on the next daily refresh.
 
@@ -39,11 +42,14 @@ author machine                       this repository                    every En
 The `encre-plugin` CLI (from the Encre repository, `cli/`) is the only supported way to enter
 this registry. Five steps, ~10 minutes for a first release.
 
-**Step 0 — Install the CLI**
+**Step 0 — Get the CLI**
 
-```bash
-pip install ea-plugin-cli        # or from a local Encre checkout: pip install -e cli/
-```
+`encre-plugin` ships as a single download-and-run executable for each OS
+(Windows `.exe`; native binaries on macOS/Linux — built by
+[`python build.py cli`](https://github.com/mf2023/Encre) in the Encre
+repository). No `pip install` is required for the tool itself; it drives a
+system Python (3.11+, standard for plugin authors) for the build/verify/publish
+steps. Prefer the module form? `pip install ea-plugin-cli` installs the same CLI.
 
 **Step 1 — Scaffold**
 
@@ -79,14 +85,15 @@ before PyPI ever sees it.
 export TWINE_USERNAME=__token__
 export TWINE_PASSWORD=<your PyPI API token>   # scoped to ea-plugin-my-toolkit
 
-encre-plugin publish --registry-dir ../ea-cwh        # real release
-encre-plugin publish --registry-dir ../ea-cwh --dry-run   # show the PR without uploading
+encre-plugin publish                            # PyPI + registry PR, in one go
 ```
 
-`publish` uploads to PyPI first, then — using the registry checkout you pointed at — writes
-`catalog.d/my-toolkit.json`, opens a branch, commits, pushes and files the PR with `gh`.
-One command, both halves of the release. If you skip `--registry-dir`, only PyPI happens and
-you open the PR yourself.
+`publish` uploads to PyPI first, then clones (or re-syncs) this registry into a
+local cache, writes `catalog.d/my-toolkit.json` on a fresh branch cut from
+`main`, pushes it and files the PR with `gh`. One command, both halves of the
+release. Flags: `--registry-dir` to use your own checkout, `--registry-url` to
+target a fork, `--no-upload` for the PR half only, `--dry-run` to print instead
+of doing anything.
 
 **Step 5 — Merge**
 
@@ -126,7 +133,7 @@ neither necessary nor encouraged.
 |:------|:------|
 | Yank a plugin | set `"yanked": true` in its `catalog.d/<name>.json`, PR as usual — yanked rows never count as updates |
 | Re-cut the index | Actions → `publish-index.yml` → *Run workflow* (validates + publishes without a catalog change) |
-| Validate a catalog locally | `python tools/regen_catalog.py` (merge + schema) · `--check-pypi` adds the PyPI cross-check · `--out ea_cwh/catalog.json` writes it |
+| Validate a catalog locally | `python tools/regen_catalog.py` (merge + schema) · `--check-pypi [names…]` adds the PyPI cross-check (no names = whole catalog) · `--out ea_cwh/catalog.json` writes it |
 | PyPI trusted publisher | one-time: PyPI project `ea-cwh` → Publishing → add `mf2023/ea-cwh` / `publish-index.yml` / environment `pypi` |
 | PRs from contributors | collaborators push branches directly; external authors fork + PR, or use `gh` after `gh auth login` |
 

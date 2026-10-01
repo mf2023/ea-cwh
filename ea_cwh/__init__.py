@@ -37,7 +37,7 @@ Entry contract (see :func:`validate_catalog`):
 
 * ``name`` is the plugin's manifest name (its registry identity).
 * ``pypi_package`` is the PyPI distribution to install and MUST carry the
-  reserved ``ea-plugin-`` namespace prefix.
+  reserved namespace prefixes (``ea-plugin-``/``ea-tool-``/``ea-skill-``).
 * ``version`` is pinned — installs always resolve to exactly this version.
 * ``artifacts`` maps distribution file names to their ``sha256`` digest so
   the installer can verify what PyPI handed back before any code runs.
@@ -55,8 +55,10 @@ __version__ = "0.1.0"
 #: Bumped only on breaking changes to the entry schema below.
 SCHEMA_VERSION = 1
 
-#: Reserved PyPI namespace for central-repository plugin distributions.
-PACKAGE_PREFIX = "ea-plugin-"
+#: Reserved PyPI namespaces for central-repository plugin distributions:
+#: ea-plugin- is the community prefix; ea-tool-/ea-skill- are the vendor
+#: namespaces the Encre build pipeline publishes official packages under.
+RESERVED_PREFIXES = ("ea-plugin-", "ea-tool-", "ea-skill-")
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^\d+[!+.a-zA-Z0-9]*$")  # PEP 440-ish sanity check
@@ -175,8 +177,8 @@ def validate_catalog(doc: Any) -> list[str]:
         if name in seen_names:
             problems.append(f"{where}: duplicate plugin name")
         seen_names.add(name)
-        if not isinstance(pkg, str) or not pkg.startswith(PACKAGE_PREFIX):
-            problems.append(f"{where}.pypi_package must start with '{PACKAGE_PREFIX}'")
+        if not isinstance(pkg, str) or not pkg.startswith(RESERVED_PREFIXES):
+            problems.append(f"{where}.pypi_package must start with one of {RESERVED_PREFIXES}")
         else:
             if pkg in seen_pkgs:
                 problems.append(f"{where}: duplicate pypi_package {pkg}")
