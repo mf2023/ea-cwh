@@ -1,0 +1,70 @@
+# Publish-on-merge for the ea-cwh index package.
+#
+# When a validated registry PR merges to main, this workflow regenerates
+# ea_cwh/catalog.json from catalog.d/, stamps a new index version
+# (0.<YYYYMMDD>.<run>), builds the data wheel and publishes it to PyPI via
+# trusted publishing (OIDC — no long-lived API token exists anywhere).
+# Encre Agent backends upgrade `ea-cwh` daily and pick the new index up.
+#
+# Setup required once on PyPI (project ea-cwh → Publishing → Trusted
+# Publisher): repository = <owner>/<registry-repo>,
+# workflow = publish-index.yml, environment = pypi.
+name: publish-index
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "catalog.d/**"
+  # Re-cut the index without a catalog change (e.g. after fixing tooling).
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+
+      - name: Regenerate and validate the catalog
+        run: python tools/regen_catalog.py --out ea_cwh/catalog.json
+
+      - name: Verify artifacts on PyPI (belt and braces at release time)
+        run: python tools/regen_catalog.py --check-pypi > /dev/null
+
+      - name: Stamp the index version
+        run: |
+          VERSION="0.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          sed -i -E "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" pyproject.toml
+          echo "version=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build the data wheel
+        run: python -m build
+
+      - name: Publish ea-cwh to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ea-cwh-${{ env.version }}
+          path: dist/
+
+      - name: Commit the regenerated index
+        run: |
+          git config user.name "ea-cwh-ci"
+          git config user.email "ea-cwh-ci@users.noreply.github.com"
+          git add ea_cwh/catalog.json pyproject.toml
+          git diff --cached --quiet || git commit -m \
+            "index: regenerate catalog.json [skip ci]"
+          git push

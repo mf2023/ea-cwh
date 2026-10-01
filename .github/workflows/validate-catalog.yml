@@ -1,0 +1,39 @@
+# PR gate for the Encre Agent plugin registry.
+#
+# Every registry PR adds/updates one catalog.d/<name>.json entry produced by
+# `encre-plugin publish`.  A PR may only merge when the merged catalog still
+# validates AND every pinned artifact is verifiably on PyPI with the exact
+# sha256 the index promises — so "merged" means "installable, byte-identical".
+name: validate-catalog-entry
+
+on:
+  pull_request:
+    paths:
+      - "catalog.d/**"
+      - "tools/regen_catalog.py"
+      - "ea_cwh/**"
+      - ".github/workflows/validate-catalog.yml"
+
+permissions: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Merge and schema-validate the catalog
+        run: python tools/regen_catalog.py > /dev/null
+
+      - name: Cross-check pinned artifacts on PyPI
+        # Reachability failures (429/timeouts) retry once; a digest mismatch
+        # or missing file is a hard reject.
+        run: |
+          python tools/regen_catalog.py --check-pypi > /dev/null || {
+            sleep 20
+            python tools/regen_catalog.py --check-pypi > /dev/null
+          }
