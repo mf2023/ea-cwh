@@ -27,7 +27,7 @@ name = "ea-cwh"
 version = "0.20261001.4"
 description = "Encre Agent plugin market central index — the catalog of published ea-plugin-* packages"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [{name = "Dunimd Team"}]
 keywords = ["encre", "plugin", "market", "catalog", "index"]

@@ -3,7 +3,7 @@
 # Encre Agent Plugin Central Registry
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Encre Agent](https://img.shields.io/badge/Encre%20Agent-plugin--market-181717?style=flat-square)](https://github.com/mf2023/Encre)
+[![Encre Agent](https://img.shields.io/badge/Encre%20Agent-plugin--market-181717?style=flat-square)](https://github.com/mf2023/encre-agent)
 
 This repository is the **central repository of the Encre Agent plugin market**. It holds the
 authoritative plugin index (one validated `catalog.json` describing every published plugin),
@@ -46,9 +46,9 @@ this registry. Five steps, ~10 minutes for a first release.
 
 `encre-plugin` ships as a single download-and-run executable for each OS
 (Windows `.exe`; native binaries on macOS/Linux — built by
-[`python build.py cli`](https://github.com/mf2023/Encre) in the Encre
-repository). No `pip install` is required for the tool itself; it drives a
-system Python (3.14+, standard for plugin authors) for the build/verify/publish
+[`python build.py cli`](https://github.com/mf2023/encre-agent) in the Encre
+Agent repository). No `pip install` is required for the tool itself; it drives a
+system Python (3.11+, standard for plugin authors) for the build/verify/publish
 steps. Prefer the module form? `pip install ea-plugin-cli` installs the same CLI.
 
 **Step 1 — Scaffold**
@@ -139,4 +139,4 @@ neither necessary nor encouraged.
 
 <h2 align="center">📄 License</h2>
 
-Apache License 2.0 — see [LICENSE](LICENSE). Part of the Encre Agent ecosystem by the Dunimd Team.
+Apache License 2.0 — see [LICENSE](LICENSE). Part of the [Encre Agent](https://github.com/mf2023/encre-agent) ecosystem by the Dunimd Team.
