@@ -1,115 +1,135 @@
-# ea-cwh — Encre Agent 插件市场中央索引
+<div align="center">
 
-`ea-cwh` 是插件市场目录数据的**唯一权威载体**：一个纯数据 Python 包，内部只有一
-份 `catalog.json`，描述中央仓库中每一个已发布插件的展示信息与安装坐标。
+# ea-cwh — Encre Agent Plugin Central Registry
 
-- 市场后端**不联网渲染**：定时 `pip install -U ea-cwh` 升级本包，然后本地读取。
-- 升级失败自动沿用上一次的好数据（后端另有 `data/market_catalog.json` 缓存兜底）。
-- 文件由 registry 仓库 CI 在每次合并后自动重新生成并发布，**禁止手改**。
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-ea--cwh-181717?style=flat-square&logo=github)](https://github.com/mf2023/ea-cwh)
 
-## 条目 schema（schema_version = 1）
+This repository is the **central repository of the Encre Agent plugin market**. It holds the
+authoritative index package `ea-cwh` (one validated `catalog.json` describing every published
+plugin), the per-plugin entry directory `catalog.d/`, the CI that gates and publishes them,
+and the zero-dependency tooling behind both.
 
-```json
-{
-  "schema_version": 1,
-  "generated_at": "2026-10-01T00:00:00+00:00",
-  "registry": "https://pypi.org",
-  "plugins": [
-    {
-      "name": "pgvector",
-      "pypi_package": "ea-plugin-pgvector",
-      "version": "1.2.0",
-      "description": "Vector search tools for Encre Agent",
-      "author": "Dunimd Team",
-      "icon": "database",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/dunimd/ea-plugin-pgvector",
-      "repository": "https://github.com/dunimd/ea-plugin-pgvector",
-      "docs": "",
-      "email": "",
-      "tags": ["database", "vector"],
-      "permissions": ["tools:register"],
-      "provides": { "tools": ["vector_search"], "skills": [] },
-      "min_encre_version": "0.5.0",
-      "artifacts": {
-        "ea_plugin_pgvector-1.2.0-py3-none-any.whl": {
-          "sha256": "<64 hex>",
-          "size": 123456
-        }
-      },
-      "published_at": "2026-09-30T12:00:00+00:00",
-      "yanked": false
-    }
-  ]
-}
-```
+The Encre Agent market backend never renders from the network: it upgrades `ea-cwh` once a
+day with pip and displays what the index says. Publishing here IS publishing to the market.
 
-硬性约束（`validate_catalog` 强制）：
+</div>
 
-1. `pypi_package` 必须以保留前缀 **`ea-plugin-`** 开头（名称保留策略见下文）。
-2. `version` 必须钉死具体版本，禁止范围表达式。
-3. 每个 `artifacts` 文件必须带 **sha256**，安装端在导入任何代码前校验。
-4. `name` 与 `pypi_package` 全局唯一。
-
-## 读取 API
-
-```python
-import ea_cwh
-
-ea_cwh.catalog()              # 校验后的完整文档（违规抛 ValueError）
-ea_cwh.plugins()              # 条目列表（默认剔除 yanked）
-ea_cwh.get("pgvector")        # 按插件名查条目
-ea_cwh.by_pypi_package("ea-plugin-pgvector")
-ea_cwh.index_version()        # 本包版本 = 索引构建戳
-```
-
-## 仓库结构与 CI
-
-本仓库即 Encre Agent 插件市场的中央 registry（`mf2023/ea-cwh`）：
+<h2 align="center">🧭 How the pipeline works</h2>
 
 ```
-ea-cwh/
-├── .github/workflows/       # validate-catalog.yml + publish-index.yml
-├── catalog.d/<name>.json    # 每个插件一个条目文件（由 encre-plugin publish 写入）
-├── ea_cwh/                  # 索引包源码（catalog.json 由 CI 生成，禁止手改）
-├── tools/regen_catalog.py   # CI 用的合并/校验/PyPI 交叉核对脚本（零依赖）
-└── pyproject.toml           # ea-cwh 包清单（版本号由 CI bump）
+author machine                       this repository                    every Encre Agent
+┌────────────────────┐   PR    ┌─────────────────────────┐   daily   ┌──────────────────────┐
+│ encre-plugin build │ ──────► │ validate-catalog.yml    │ ────────► │ pip install -U ea-cwh │
+│ encre-plugin verify│  merge  │   (schema + PyPI digest │  publish  │ read catalog.json     │
+│ encre-plugin publish│ ─────► │    cross-check)         │ ────────► │ render the market     │
+└────────────────────┘         │ publish-index.yml       │           │ install = pinned +    │
+                               │   → PyPI (trusted pub.) │           │   sha256-verified     │
+                               └─────────────────────────┘           └──────────────────────┘
 ```
 
-两个工作流：
+1. A plugin is a normal Python package named **`ea-plugin-<name>`**, published to PyPI.
+2. Its catalogue entry lands here as `catalog.d/<name>.json` via a PR opened by `encre-plugin publish`.
+3. The PR gate merges all entries, validates the schema and cross-checks every artifact on PyPI.
+4. Merging triggers `publish-index.yml`, which regenerates `ea_cwh/catalog.json`, stamps a new
+   index version and releases `ea-cwh` to PyPI. Agents pick it up on the next daily refresh.
 
-1. **validate-catalog.yml（PR 闸门）**——作者本地执行
-   `encre-plugin publish --registry-dir <registry 仓库检出>` 会先上传
-   PyPI，再向 registry 仓库提交只含 `catalog.d/<name>.json` 的 PR。CI
-   重新合并全部条目并校验 schema，再逐个核对 PyPI 上是否存在该
-   `pypi_package==version` 且 wheel 的 sha256 与索引承诺完全一致——
-   校验不过就不许合并，"合并"即意味着"可安装且字节一致"。
-2. **publish-index.yml（合并即发布）**——PR 合入 main 后触发：重新生成
-   `ea_cwh/catalog.json` → 以 `0.<日期>.<run号>` 打新索引版本 → 构建
-   data wheel → **trusted publishing（OIDC）发布 ea-cwh 到 PyPI** → 把
-   重新生成的 catalog.json 提交回 main。各 Encre Agent 后端每日升级
-   `ea-cwh` 即可拿到新索引。
+<h2 align="center">🚀 Publishing a plugin with the CLI</h2>
 
-### 一次性配置
+The `encre-plugin` CLI (from the Encre repository, `cli/`) is the only supported way to enter
+this registry. Five steps, ~10 minutes for a first release.
 
-- **PyPI trusted publishing**：在 ea-cwh 项目页 Publishing → Trusted
-  Publisher，添加仓库 = `mf2023/ea-cwh`、workflow =
-  `publish-index.yml`、environment = `pypi`。索引发布全程零长期 token。
-- **插件作者的 PyPI 权限**：每个 `ea-plugin-*` 项目同样建议配置 trusted
-  publishing（指向插件自己的仓库 CI）；作者本机一次性发布则用
-  `__token__` API token（twine 默认读取）。
+**Step 0 — Install the CLI**
 
-### 名称保留
+```bash
+pip install ea-plugin-cli        # or from a local Encre checkout: pip install -e cli/
+```
 
-PyPI 没有官方前缀保留机制，防线由索引侧构成：`validate_catalog` 强制
-`ea-plugin-` 前缀，PR 闸门核对钉死版本与 sha256，抢注/篡改的包永远过不了
-合并。建议另做一次加固：把当前目录里已知的每个 `ea-plugin-*` 名称先在
-PyPI 上传一个占位版本，防止外部抢注后再被误加进索引。
+**Step 1 — Scaffold**
 
-### `encre-plugin publish` 的 GitHub 权限
+```bash
+encre-plugin init my-toolkit
+cd ea-plugin-my-toolkit
+```
 
-CLI 开 registry PR 用作者本机的 `git push` + `gh pr create`：协作者直推
-需要 registry 仓库的 fine-grained PAT（Contents: Read/Write + Pull
-requests: Read/Write）；外部贡献者走 fork 流程，用 `gh auth login` 自身
-权限即可。
+Creates a compliant skeleton: `pyproject.toml` with the
+`[project.entry-points."ea.plugins"]` registration and `[tool.ea]` tier, a `plugin.py` with a
+`create_plugin` factory, and a `ui/` directory for pre-compiled frontend assets.
 
+**Step 2 — Implement**
+
+Fill in the manifest (name, version, description, author, license, tags, permissions,
+capabilities). Rules the CLI will enforce at build time are listed [below](#-submission-rules).
+
+**Step 3 — Build and verify**
+
+```bash
+encre-plugin build      # policy check → wheel + sdist → sha256 every artifact
+                        # writes dist/ea-build-info.json (your catalogue entry draft)
+encre-plugin verify     # fresh temp venv, install the wheel, import the entry point,
+                        # call the factory and echo the manifest back
+```
+
+`build` refuses to produce anything if a rule fails; `verify` proves the wheel is loadable
+before PyPI ever sees it.
+
+**Step 4 — Publish**
+
+```bash
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD=<your PyPI API token>   # scoped to ea-plugin-my-toolkit
+
+encre-plugin publish --registry-dir ../ea-cwh        # real release
+encre-plugin publish --registry-dir ../ea-cwh --dry-run   # show the PR without uploading
+```
+
+`publish` uploads to PyPI first, then — using the registry checkout you pointed at — writes
+`catalog.d/my-toolkit.json`, opens a branch, commits, pushes and files the PR with `gh`.
+One command, both halves of the release. If you skip `--registry-dir`, only PyPI happens and
+you open the PR yourself.
+
+**Step 5 — Merge**
+
+CI validates the PR; after a maintainer merges, the index is rebuilt and published
+automatically. Your plugin appears in every Encre Agent market within one refresh cycle
+(≤ 24 h). From then on, every release is just steps 3–4 again with a bumped version.
+
+<h2 align="center">📋 Submission rules</h2>
+
+Enforced by `encre-plugin build` and again by `ea_cwh.validate_catalog` in CI — a squatted,
+mis-versioned or tampered package can never merge:
+
+| Rule | Detail |
+|:------|:------|
+| Reserved prefix | PyPI name must start with `ea-plugin-`; `name` and `pypi_package` are unique in the index |
+| One plugin per wheel | exactly one `[project.entry-points."ea.plugins"]` entry |
+| Version pinned | a concrete PEP 440 version, never a range; manifest version == pyproject version |
+| Metadata complete | description, author, license non-empty; `min_encre_version` or `engines.encre` declared; tier is `user` |
+| Digests required | every artifact ships a 64-hex `sha256`; the installer verifies the download against it before installing |
+| UI pre-compiled | packages declaring UI must bundle `ui/` assets as package data — the market machine never runs a build |
+
+The entry fields themselves are defined by `tools/regen_catalog.py` / `ea_cwh` validation —
+`encre-plugin build` emits the correct shape for you, so hand-writing a `catalog.d/` file is
+neither necessary nor encouraged.
+
+<h2 align="center">🛡️ Why this is safe to auto-install</h2>
+
+- The market installs **exactly** the version the index names, downloads it from PyPI, and
+  refuses anything whose sha256 does not match the entry that survived human review.
+- Freshly installed code is not executed at once: the plugin enters the registry's dynamic
+  authorisation flow (`confirm_activation`) — import happens only at activation time.
+- A failed activation rolls the ledger entry back; nothing half-installed stays behind.
+
+<h2 align="center">🧰 Maintainer operations</h2>
+
+| Task | How |
+|:------|:------|
+| Yank a plugin | set `"yanked": true` in its `catalog.d/<name>.json`, PR as usual — yanked rows never count as updates |
+| Re-cut the index | Actions → `publish-index.yml` → *Run workflow* (validates + publishes without a catalog change) |
+| Validate a catalog locally | `python tools/regen_catalog.py` (merge + schema) · `--check-pypi` adds the PyPI cross-check · `--out ea_cwh/catalog.json` writes it |
+| PyPI trusted publisher | one-time: PyPI project `ea-cwh` → Publishing → add `mf2023/ea-cwh` / `publish-index.yml` / environment `pypi` |
+| PRs from contributors | collaborators push branches directly; external authors fork + PR, or use `gh` after `gh auth login` |
+
+<h2 align="center">📄 License</h2>
+
+Apache License 2.0 — see [LICENSE](LICENSE). Part of the Encre Agent ecosystem by the Dunimd Team.
