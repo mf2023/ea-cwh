@@ -48,7 +48,7 @@ this registry. Five steps, ~10 minutes for a first release.
 (Windows `.exe`; native binaries on macOS/Linux — built by
 [`python build.py cli`](https://github.com/mf2023/Encre) in the Encre
 repository). No `pip install` is required for the tool itself; it drives a
-system Python (3.11+, standard for plugin authors) for the build/verify/publish
+system Python (3.14+, standard for plugin authors) for the build/verify/publish
 steps. Prefer the module form? `pip install ea-plugin-cli` installs the same CLI.
 
 **Step 1 — Scaffold**
