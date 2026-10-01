@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "generated_at": "2026-10-01T00:00:00+00:00",
+  "generated_at": "2026-10-01T15:10:13+00:00",
+  "plugins": [],
   "registry": "https://pypi.org",
-  "plugins": []
+  "schema_version": 1
 }
