@@ -2,13 +2,12 @@
 #
 # When a validated registry PR merges to main, this workflow regenerates
 # ea_cwh/catalog.json from catalog.d/, stamps a new index version
-# (0.<YYYYMMDD>.<run>), builds the data wheel and publishes it to PyPI via
-# trusted publishing (OIDC — no long-lived API token exists anywhere).
-# Encre Agent backends upgrade `ea-cwh` daily and pick the new index up.
+# (0.<YYYYMMDD>.<run>), builds the data wheel and publishes it to PyPI
+# with a fine-grained API token.  Encre Agent backends upgrade `ea-cwh`
+# daily and pick the new index up.
 #
-# Setup required once on PyPI (project ea-cwh → Publishing → Trusted
-# Publisher): repository = <owner>/<registry-repo>,
-# workflow = publish-index.yml, environment = pypi.
+# Setup required once on GitHub: repository secret PYPI_API_TOKEN holding
+# an API token created on pypi.org (Account settings -> API tokens).
 name: publish-index
 
 on:
@@ -25,11 +24,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       contents: write
-      # Trusted publishing: PyPI exchange requires the OIDC id token.
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -55,8 +51,12 @@ jobs:
       - name: Build the data wheel
         run: python -m build
 
-      - name: Publish ea-cwh to PyPI (trusted publishing)
+      - name: Publish ea-cwh to PyPI (API token)
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: false
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
